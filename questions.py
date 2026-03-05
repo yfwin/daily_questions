@@ -42,6 +42,7 @@ def generate_questions():
 3. 样式：最新山东事业单位统考真题样式
 4. 每道题必须包含：题目、选项（客观题）、答案、【出题人思路】（考点、命题意图、山东考情、陷阱提示）
 5. 输出必须有内容，禁止空内容，即使出题异常，也需明确提示文字（不少于10字）
+6. 输出不用分段太多，紧凑清晰，适配微信模板推送，避免格式错乱导致无内容显示
 
 输出格式清晰、可直接刷题，不要多余开场白和结尾。
 """
@@ -55,26 +56,28 @@ def generate_questions():
         )
         data = resp.json()
         content = data.get("content", "")
-        # 新增：避免空内容，空内容时直接判定失败并提示
+        # 新增：避免空内容、空格内容，强制补充提示，彻底解决无内容问题
         if not content or len(content.strip()) < 10:
-            return "出题服务暂时不可用，将在5分钟后重新尝试出题。", False
+            content = "出题服务暂时不可用，将在5分钟后重新尝试出题，无需手动操作。"
+            return content, False
         # 判断是否出题成功（排除空内容、失败提示）
         if "出题服务暂时不可用" not in content and "出题接口异常" not in content:
             return content, True
         else:
-            return "出题服务暂时不可用，将在5分钟后重新尝试出题。", False
+            return content, False
     except Exception as e:
         print(f"出题接口异常：{str(e)}")
-        return "出题接口异常，将在5分钟后重新尝试出题。", False
+        content = "出题接口异常，将在5分钟后重新尝试出题，无需手动操作。"
+        return content, False
 
-# ========== 微信测试号推送（替换PushPlus，完全免费）==========
+# ========== 微信测试号推送（替换PushPlus，完全免费，修复无内容bug）==========
 def get_access_token():
     # 获取微信推送授权token（免费，有效期2小时，自动刷新）
     url = f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={APPID}&secret={APPSECRET}"
     try:
         resp = requests.get(url, timeout=10)
         data = resp.json()
-        # 新增：判断token获取是否成功
+        # 新增：判断token获取是否成功，失败直接返回明确提示
         if "errcode" in data and data["errcode"] != 0:
             print(f"获取token失败：{data.get('errmsg', '未知错误')}")
             return ""
@@ -86,12 +89,19 @@ def get_access_token():
 def send_to_wechat(content):
     access_token = get_access_token()
     if not access_token:
-        print("推送失败：未获取到微信授权token")
-        return False  # 推送失败返回False
+        # 新增：token获取失败，推送明确提示，避免无内容
+        error_content = "微信推送授权失败，建议重新检查GitHub中APPID和APPSECRET密钥是否填写正确，无多余空格。"
+        print(error_content)
+        # 尝试再次获取token，二次推送
+        access_token = get_access_token()
+        if not access_token:
+            return False
     # 推送接口地址
     url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={access_token}"
-    # 推送内容（适配模板格式，确保content不为空）
-    content = content.strip() if content.strip() else "当前出题暂未获取到内容，将在5分钟后重试"
+    # 强制确保content不为空，彻底解决只显标题问题
+    content = content.strip() if content.strip() else "当前出题暂未获取到内容，将在5分钟后自动重试，无需手动操作。"
+    # 适配微信模板，优化内容格式，避免格式错乱导致无内容
+    content = content.replace("\n", "  \n")  # 微信模板换行适配
     data = {
         "touser": OPENID,
         "template_id": TEMPLATE_ID,
@@ -108,10 +118,16 @@ def send_to_wechat(content):
         # 判断推送是否成功（微信返回errcode为0则成功）
         if resp_data.get("errcode", 1) != 0:
             print(f"推送失败：{resp_data.get('errmsg', '未知错误')}")
+            # 推送失败，补充推送失败提示
+            fail_content = f"推送失败（错误：{resp_data.get('errmsg', '未知')}），将在5分钟后重新尝试，无需手动操作。"
+            send_to_wechat(fail_content)
             return False
         return True
     except Exception as e:
         print(f"推送异常：{str(e)}")
+        # 推送异常，补充提示
+        fail_content = "推送接口异常，将在5分钟后重新尝试，无需手动操作。"
+        send_to_wechat(fail_content)
         return False
 
 # ========== 重试逻辑（5次重试，每次间隔5分钟）==========
