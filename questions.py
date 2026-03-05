@@ -41,6 +41,7 @@ def generate_questions():
 2. 难度：基础、中等、偏难 随机分布
 3. 样式：最新山东事业单位统考真题样式
 4. 每道题必须包含：题目、选项（客观题）、答案、【出题人思路】（考点、命题意图、山东考情、陷阱提示）
+5. 输出必须有内容，禁止空内容，即使出题异常，也需明确提示文字（不少于10字）
 
 输出格式清晰、可直接刷题，不要多余开场白和结尾。
 """
@@ -54,12 +55,16 @@ def generate_questions():
         )
         data = resp.json()
         content = data.get("content", "")
+        # 新增：避免空内容，空内容时直接判定失败并提示
+        if not content or len(content.strip()) < 10:
+            return "出题服务暂时不可用，将在5分钟后重新尝试出题。", False
         # 判断是否出题成功（排除空内容、失败提示）
-        if content and "出题服务暂时不可用" not in content and "出题接口异常" not in content:
+        if "出题服务暂时不可用" not in content and "出题接口异常" not in content:
             return content, True
         else:
             return "出题服务暂时不可用，将在5分钟后重新尝试出题。", False
-    except:
+    except Exception as e:
+        print(f"出题接口异常：{str(e)}")
         return "出题接口异常，将在5分钟后重新尝试出题。", False
 
 # ========== 微信测试号推送（替换PushPlus，完全免费）==========
@@ -69,17 +74,24 @@ def get_access_token():
     try:
         resp = requests.get(url, timeout=10)
         data = resp.json()
+        # 新增：判断token获取是否成功
+        if "errcode" in data and data["errcode"] != 0:
+            print(f"获取token失败：{data.get('errmsg', '未知错误')}")
+            return ""
         return data.get("access_token", "")
-    except:
+    except Exception as e:
+        print(f"获取token异常：{str(e)}")
         return ""
 
 def send_to_wechat(content):
     access_token = get_access_token()
     if not access_token:
+        print("推送失败：未获取到微信授权token")
         return False  # 推送失败返回False
     # 推送接口地址
     url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={access_token}"
-    # 推送内容（适配模板格式）
+    # 推送内容（适配模板格式，确保content不为空）
+    content = content.strip() if content.strip() else "当前出题暂未获取到内容，将在5分钟后重试"
     data = {
         "touser": OPENID,
         "template_id": TEMPLATE_ID,
@@ -94,8 +106,12 @@ def send_to_wechat(content):
         resp = requests.post(url, json=data, timeout=30)
         resp_data = resp.json()
         # 判断推送是否成功（微信返回errcode为0则成功）
-        return resp_data.get("errcode", 1) == 0
-    except:
+        if resp_data.get("errcode", 1) != 0:
+            print(f"推送失败：{resp_data.get('errmsg', '未知错误')}")
+            return False
+        return True
+    except Exception as e:
+        print(f"推送异常：{str(e)}")
         return False
 
 # ========== 重试逻辑（5次重试，每次间隔5分钟）==========
