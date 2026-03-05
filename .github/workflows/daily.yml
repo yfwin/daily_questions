@@ -1,0 +1,26 @@
+name: 2026山东事业单位每日刷题
+
+on:
+  schedule:
+    - cron: "0 0 * * *"   # 早 8:00 北京时间
+    - cron: "0 12 * * *"  # 晚 20:00 北京时间
+  workflow_dispatch:      # 允许手动测试
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests
+      - name: Run
+        env:
+          APPID: ${{ secrets.APPID }}
+          APPSECRET: ${{ secrets.APPSECRET }}
+          TEMPLATE_ID: ${{ secrets.TEMPLATE_ID }}
+          OPENID: ${{ secrets.OPENID }}
+        run: python questions.py
