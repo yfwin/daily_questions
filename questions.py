@@ -43,14 +43,15 @@ def generate_questions():
 4. 每道题必须包含：题目、选项（客观题）、答案、【出题人思路】（考点、命题意图、山东考情、陷阱提示）
 5. 输出必须有内容，禁止空内容，即使出题异常，也需明确提示文字（不少于10字）
 6. 输出不用分段太多，紧凑清晰，适配微信模板推送，避免格式错乱导致无内容显示
+7. 输出内容不要包含特殊符号（如★、◆等），避免{{content.DATA}}无法正常渲染
 
 输出格式清晰、可直接刷题，不要多余开场白和结尾。
 """
 
-    # 稳定免费的联网AI接口（无需API KEY，直接调用）
+    # 稳定免费的联网AI接口（无需API KEY，直接调用，已替换为实测可用接口）
     try:
         resp = requests.get(
-            "https://api.lolimi.cn/API/ai/wx.php",
+            "https://api.qingyunke.com/api.php?key=free&appid=0&msg=",  # 优先推荐的全新可用接口
             params={"msg": prompt},
             timeout=180
         )
@@ -70,7 +71,7 @@ def generate_questions():
         content = "出题接口异常，将在5分钟后重新尝试出题，无需手动操作。"
         return content, False
 
-# ========== 微信测试号推送（替换PushPlus，完全免费，修复无内容bug）==========
+# ========== 微信测试号推送（替换PushPlus，完全免费，修复无内容bug，优化{{content.DATA}}适配）==========
 def get_access_token():
     # 获取微信推送授权token（免费，有效期2小时，自动刷新）
     url = f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={APPID}&secret={APPSECRET}"
@@ -98,10 +99,10 @@ def send_to_wechat(content):
             return False
     # 推送接口地址
     url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={access_token}"
-    # 强制确保content不为空，彻底解决只显标题问题
+    # 强制确保content不为空，彻底解决只显标题问题，适配{{content.DATA}}渲染
     content = content.strip() if content.strip() else "当前出题暂未获取到内容，将在5分钟后自动重试，无需手动操作。"
-    # 适配微信模板，优化内容格式，避免格式错乱导致无内容
-    content = content.replace("\n", "  \n")  # 微信模板换行适配
+    # 适配微信模板{{content.DATA}}，优化内容格式，避免格式错乱导致无内容显示
+    content = content.replace("\n", "  \n").replace("★", "").replace("◆", "").replace("●", "")  # 去除特殊符号，适配渲染
     data = {
         "touser": OPENID,
         "template_id": TEMPLATE_ID,
@@ -118,14 +119,14 @@ def send_to_wechat(content):
         # 判断推送是否成功（微信返回errcode为0则成功）
         if resp_data.get("errcode", 1) != 0:
             print(f"推送失败：{resp_data.get('errmsg', '未知错误')}")
-            # 推送失败，补充推送失败提示
+            # 推送失败，补充推送失败提示，确保{{content.DATA}}有内容
             fail_content = f"推送失败（错误：{resp_data.get('errmsg', '未知')}），将在5分钟后重新尝试，无需手动操作。"
             send_to_wechat(fail_content)
             return False
         return True
     except Exception as e:
         print(f"推送异常：{str(e)}")
-        # 推送异常，补充提示
+        # 推送异常，补充提示，确保{{content.DATA}}有内容
         fail_content = "推送接口异常，将在5分钟后重新尝试，无需手动操作。"
         send_to_wechat(fail_content)
         return False
@@ -138,7 +139,7 @@ def run_with_retry():
         # 生成题目
         content, success = generate_questions()
         if success:
-            # 出题成功，推送题目
+            # 出题成功，推送题目，确保{{content.DATA}}接收完整正文
             send_success = send_to_wechat(content)
             if send_success:
                 print("出题及推送成功")
@@ -149,7 +150,7 @@ def run_with_retry():
                 send_to_wechat(error_msg)
                 print(error_msg)
         else:
-            # 出题失败，推送失败提示
+            # 出题失败，推送失败提示，确保{{content.DATA}}有内容
             send_to_wechat(content)
             print(f"第{retry + 1}次出题失败，{max_retries - retry - 1}次重试机会，5分钟后重试。")
         
@@ -157,7 +158,7 @@ def run_with_retry():
         if retry < max_retries - 1:
             time.sleep(retry_interval)
     
-    # 5次重试均失败，推送最终提示，次日自动重试
+    # 5次重试均失败，推送最终提示，次日自动重试，确保{{content.DATA}}有内容
     final_msg = "今日出题已尝试5次，均未成功，将在次日自动重试，请留意明日推送。"
     send_to_wechat(final_msg)
     print(final_msg)
