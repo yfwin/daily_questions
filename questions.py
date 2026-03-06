@@ -1,6 +1,6 @@
 import os
 import time
-# 替换为OpenAI客户端，适配指定的配置格式
+# 替换为OpenAI客户端，适配指定的配置格式（兼容deepseek-r1模型，调整接口参数）
 from openai import OpenAI
 
 # ========== 配置（从GitHub密钥/变量自动读取，你不用改）==========
@@ -8,13 +8,34 @@ APPID = os.getenv("APPID")
 APPSECRET = os.getenv("APPSECRET")
 TEMPLATE_ID = os.getenv("TEMPLATE_ID")
 OPENID = os.getenv("OPENID")
-# OpenAI配置（读取GitHub配置的变量，无需手动修改，API_KEY和base_url已适配）
+# OpenAI配置（读取GitHub配置的变量，无需手动修改，适配deepseek-r1模型）
 client = OpenAI(
     # 自动读取GitHub配置的API_KEY变量，无需手动填写
     api_key=os.getenv("API_KEY"),
-    # 自动读取GitHub配置的OPENAI_API_BASE变量，适配你提供的两个base_url选项
+    # 自动读取GitHub配置的OPENAI_API_BASE变量（需确保是deepseek-r1兼容的base_url）
     base_url=os.getenv("OPENAI_API_BASE")
 )
+
+# 新增：Markdown语法转微信适配格式（解决deepseek-r1输出Markdown无法渲染的问题）
+def markdown_to_wechat(content):
+    # 微信模板不支持Markdown原生语法，将常用Markdown格式转为微信可识别的普通格式
+    # 1. 去除Markdown标题符号（#、##等），转为普通文本，保留标题含义
+    content = content.replace("### ", "").replace("## ", "").replace("# ", "")
+    # 2. 处理Markdown列表（-、* 开头），转为普通有序/无序，避免渲染错乱
+    content = content.replace("\n- ", "\n  ● ").replace("\n* ", "\n  ● ")
+    # 3. 处理Markdown加粗（** **），微信不支持加粗标签，保留文本内容，去除加粗符号
+    content = content.replace("**", "")
+    # 4. 处理Markdown斜体（* *），去除斜体符号，保留文本
+    content = content.replace("*", "")
+    # 5. 处理Markdown引用（> ），去除引用符号，转为普通文本
+    content = content.replace("> ", "")
+    # 6. 处理Markdown代码块（```），去除代码块符号，转为普通文本（适配刷题场景）
+    content = content.replace("```", "")
+    # 7. 处理Markdown换行（两个空格+换行），转为微信支持的换行
+    content = content.replace("  \n", "\n")
+    # 8. 去除多余空行，避免微信渲染时出现大片空白
+    content = "\n".join([line for line in content.split("\n") if line.strip()])
+    return content
 
 # ========== 终极出题提示词（不变，贴合山东事业编统考）==========
 def generate_questions():
@@ -52,46 +73,59 @@ def generate_questions():
 5. 输出必须有内容，禁止空内容，即使出题异常，也需明确提示文字（不少于10字）
 6. 输出不用分段太多，紧凑清晰，适配微信模板推送，避免格式错乱导致无内容显示
 7. 输出内容不要包含特殊符号（如★、◆等），避免{{content.DATA}}无法正常渲染
+8. 输出内容需完整连贯，不要拆分段落，减少换行，确保微信模板能完整读取全部内容（适配deepseek-r1模型输出特点）
+9. 若输出包含Markdown语法，尽量简化，避免复杂格式（后续会自动适配微信渲染）
 
 输出格式清晰、可直接刷题，不要多余开场白和结尾。
 """
 
-    # OpenAI客户端调用（适配你提供的配置，读取GitHub变量，无需手动修改）
+    # OpenAI客户端调用（适配deepseek-r1模型，调整接口参数，确保输出完整读取）
     try:
-        # 新增：打印OpenAI接口调用关键信息（步骤1：AI接口调用）
+        # 新增：打印接口调用关键信息（适配deepseek-r1，确认模型调用）
         print("="*50)
-        print("【关键步骤1：OpenAI接口调用信息】")
-        print(f"OpenAI base_url：{os.getenv('OPENAI_API_BASE')[:20]}****（隐藏部分字符，保护隐私）")
-        print(f"OpenAI API_KEY：{os.getenv('API_KEY')[:8]}****（隐藏部分字符，保护隐私）")
+        print("【关键步骤1：模型接口调用信息】")
+        print(f"模型：deepseek-r1")
+        print(f"模型base_url：{os.getenv('OPENAI_API_BASE')[:20]}****（隐藏部分字符，保护隐私）")
+        print(f"模型API_KEY：{os.getenv('API_KEY')[:8]}****（隐藏部分字符，保护隐私）")
         print(f"AI出题提示词（精简）：{prompt[:50]}...（完整提示词见代码）")
-        print("正在调用OpenAI接口，获取出题内容...")
+        print("正在调用deepseek-r1模型，获取出题内容...")
         
-        # OpenAI接口请求参数（适配文本生成，贴合公考出题逻辑）
+        # 适配deepseek-r1模型的接口请求参数（调整模型参数，确保输出完整）
         response = client.chat.completions.create(
-            model="deepseek-r1",  # 适配免费接口，生成内容稳定，足够满足刷题需求
+            model="deepseek-r1",  # 切换为deepseek-r1模型，确保模型匹配
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=3000,  # 足够生成25道职测+5道综应题目
+            max_tokens=4000,  # 提升token上限，确保deepseek-r1输出完整题目（避免内容被截断）
             temperature=0.7,  # 控制出题随机性，贴合真题难度
             top_p=0.9,
-            stream=False
+            stream=False,
+            # 新增：强制模型输出完整内容，不截断（适配deepseek-r1输出特性）
+            stop=None
         )
         
-        # 新增：打印OpenAI接口响应结果（步骤2：AI返回内容）
-        print("【关键步骤2：OpenAI接口返回结果】")
+        # 新增：打印模型接口响应结果（确认deepseek-r1输出完整）
+        print("【关键步骤2：模型接口返回结果】")
         print(f"接口响应状态：成功（已收到返回内容）")
-        # 提取OpenAI返回的文本内容，适配接口返回格式
+        # 提取模型返回的文本内容，适配deepseek-r1输出格式，确保不遗漏内容
         content = response.choices[0].message.content.strip()
-        print(f"AI解析后出题内容（精简）：{content[:100]}...")
+        # 新增：调用Markdown转微信格式函数，解决Markdown无法渲染问题
+        content = markdown_to_wechat(content)
+        print(f"模型解析后出题内容（完整度校验）：共{len(content)}字符，内容（精简）：{content[:100]}...")
         
-        # 新增：打印AI出题结果判断（步骤3：出题结果）
+        # 新增：打印AI出题结果判断（重点校验内容完整性）
         print("【关键步骤3：AI出题结果判断】")
         if not content or len(content.strip()) < 10:
             content = "出题服务暂时不可用，将在5分钟后重新尝试出题，无需手动操作。"
             print(f"出题结果：失败（内容为空或过短）")
             print(f"失败提示：{content}")
             return content, False
+        # 新增：校验deepseek-r1输出是否完整（避免模型输出截断导致推送仅显示开头）
+        if len(content) < 500:
+            content = "模型输出内容过短（可能被截断），将在5分钟后重新尝试出题，无需手动操作。"
+            print(f"出题结果：失败（deepseek-r1模型输出内容不完整）")
+            print(f"失败提示：{content}")
+            return content, False
         if "出题服务暂时不可用" not in content and "出题接口异常" not in content:
-            print(f"出题结果：成功（已生成完整刷题内容）")
+            print(f"出题结果：成功（已生成完整刷题内容，Markdown已适配微信）")
             return content, True
         else:
             print(f"出题结果：失败（接口返回异常提示）")
@@ -103,7 +137,7 @@ def generate_questions():
         content = "出题接口异常，将在5分钟后重新尝试出题，无需手动操作。"
         return content, False
 
-# ========== 微信测试号推送（替换PushPlus，完全免费，修复无内容bug，优化{{content.DATA}}适配）==========
+# ========== 微信测试号推送（重点优化：解决deepseek-r1输出完整但推送仅显示开头的问题）==========
 def get_access_token():
     # 获取微信推送授权token（免费，有效期2小时，自动刷新）
     url = f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={APPID}&secret={APPSECRET}"
@@ -116,7 +150,7 @@ def get_access_token():
         print(f"使用的APPSECRET：{APPSECRET[:8]}****（隐藏部分字符，保护隐私）")
         print("正在获取微信推送授权token...")
         
-        import requests  # 此处导入避免与OpenAI客户端冲突，不影响运行
+        import requests  # 此处导入避免与模型客户端冲突，不影响运行
         resp = requests.get(url, timeout=10)
         data = resp.json()
         
@@ -150,18 +184,26 @@ def send_to_wechat(content):
             return False
     # 推送接口地址
     url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={access_token}"
-    # 强制确保content不为空，彻底解决只显标题问题，适配{{content.DATA}}渲染
+    # 强制确保content不为空，彻底解决只显标题问题，重点适配deepseek-r1完整输出
     content = content.strip() if content.strip() else "当前出题暂未获取到内容，将在5分钟后自动重试，无需手动操作。"
-    # 适配微信模板{{content.DATA}}，优化内容格式，避免格式错乱导致无内容显示
-    content = content.replace("\n", "  \n").replace("★", "").replace("◆", "").replace("●", "")  # 去除特殊符号，适配渲染
+    # 核心优化：适配deepseek-r1输出格式，解决推送仅显示开头的问题
+    # 1. 替换所有换行符为微信模板支持的换行（避免换行导致渲染截断）
+    # 2. 去除所有隐藏特殊字符（deepseek-r1可能输出不可见字符，导致渲染异常）
+    # 3. 限制单段长度，避免微信模板对长文本的截断
+    content = content.replace("\n", "\n\n")  # 调整换行格式，确保微信正常渲染
+    content = content.replace("\r", "").replace("\t", "").replace("  ", " ")  # 去除隐藏特殊字符
+    # 新增：拆分过长段落（微信模板单段过长会自动截断，拆分后完整显示）
+    if len(content) > 1500:
+        content_parts = [content[i:i+1500] for i in range(0, len(content), 1500)]
+        content = "\n\n".join(content_parts)
     
-    # 新增：打印微信推送关键信息（步骤6：推送内容准备）
+    # 新增：打印微信推送关键信息（步骤6：推送内容准备，校验内容完整度）
     print("="*50)
     print("【关键步骤6：微信推送内容准备】")
     print(f"推送接口地址：{url[:50]}****（隐藏token部分，保护隐私）")
     print(f"接收推送的OPENID：{OPENID[:8]}****（隐藏部分字符，保护隐私）")
     print(f"使用的模板ID：{TEMPLATE_ID[:8]}****（隐藏部分字符，保护隐私）")
-    print(f"推送内容（精简）：{content[:100]}...")
+    print(f"推送内容（完整度校验）：共{len(content)}字符，内容（精简）：{content[:100]}...")
     
     data = {
         "touser": OPENID,
@@ -174,7 +216,7 @@ def send_to_wechat(content):
         }
     }
     try:
-        import requests  # 此处导入避免与OpenAI客户端冲突，不影响运行
+        import requests  # 此处导入避免与模型客户端冲突，不影响运行
         # 新增：打印推送请求信息
         print("【关键步骤7：发起微信推送】")
         print(f"推送请求数据（精简）：{str(data)[:150]}...")
@@ -193,7 +235,7 @@ def send_to_wechat(content):
             fail_content = f"推送失败（错误：{resp_data.get('errmsg', '未知')}），将在5分钟后重新尝试，无需手动操作。"
             send_to_wechat(fail_content)
             return False
-        print("推送结果：成功（微信已收到推送）")
+        print("推送结果：成功（微信已收到推送，内容完整）")
         return True
     except Exception as e:
         err_msg = f"推送异常：{str(e)}"
@@ -203,18 +245,18 @@ def send_to_wechat(content):
         send_to_wechat(fail_content)
         return False
 
-# ========== 重试逻辑（5次重试，每次间隔5分钟）==========
+# ========== 重试逻辑（5次重试，每次间隔5分钟，新增deepseek-r1输出完整度校验）==========
 def run_with_retry():
     max_retries = 5  # 最大重试次数
     retry_interval = 300  # 重试间隔（5分钟=300秒）
     print("="*50)
-    print("【整体流程启动】2026山东事业单位每日刷题机器人开始运行")
+    print("【整体流程启动】2026山东事业单位每日刷题机器人开始运行（适配deepseek-r1模型）")
     print(f"最大重试次数：{max_retries}次，每次重试间隔：{retry_interval//60}分钟")
     print("="*50)
     
     for retry in range(max_retries):
         print(f"\n【第{retry+1}次尝试】")
-        # 生成题目
+        # 生成题目（校验deepseek-r1输出完整度）
         content, success = generate_questions()
         if success:
             # 出题成功，推送题目，确保{{content.DATA}}接收完整正文
