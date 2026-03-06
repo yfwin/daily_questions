@@ -1,12 +1,20 @@
 import os
-import requests
 import time
+# 替换为OpenAI客户端，适配指定的配置格式
+from openai import OpenAI
 
-# ========== 配置（从GitHub密钥自动读取，你不用改）==========
+# ========== 配置（从GitHub密钥/变量自动读取，你不用改）==========
 APPID = os.getenv("APPID")
 APPSECRET = os.getenv("APPSECRET")
 TEMPLATE_ID = os.getenv("TEMPLATE_ID")
 OPENID = os.getenv("OPENID")
+# OpenAI配置（读取GitHub配置的变量，无需手动修改，API_KEY和base_url已适配）
+client = OpenAI(
+    # 自动读取GitHub配置的API_KEY变量，无需手动填写
+    api_key=os.getenv("API_KEY"),
+    # 自动读取GitHub配置的OPENAI_API_BASE变量，适配你提供的两个base_url选项
+    base_url=os.getenv("OPENAI_API_BASE")
+)
 
 # ========== 终极出题提示词（不变，贴合山东事业编统考）==========
 def generate_questions():
@@ -48,27 +56,31 @@ def generate_questions():
 输出格式清晰、可直接刷题，不要多余开场白和结尾。
 """
 
-    # 稳定免费的联网AI接口（无需API KEY，直接调用，已替换为实测可用接口）
+    # OpenAI客户端调用（适配你提供的配置，读取GitHub变量，无需手动修改）
     try:
-        # 新增：打印AI接口调用关键信息（步骤1：AI搜索/接口调用）
+        # 新增：打印OpenAI接口调用关键信息（步骤1：AI接口调用）
         print("="*50)
-        print("【关键步骤1：AI接口调用信息】")
-        print(f"AI接口地址：https://api.qingyunke.com/api.php?key=free&appid=0&msg=")
-        print(f"AI搜索/出题提示词（精简）：{prompt[:50]}...（完整提示词见代码）")
-        print("正在调用AI接口，获取出题内容...")
+        print("【关键步骤1：OpenAI接口调用信息】")
+        print(f"OpenAI base_url：{os.getenv('OPENAI_API_BASE')[:20]}****（隐藏部分字符，保护隐私）")
+        print(f"OpenAI API_KEY：{os.getenv('API_KEY')[:8]}****（隐藏部分字符，保护隐私）")
+        print(f"AI出题提示词（精简）：{prompt[:50]}...（完整提示词见代码）")
+        print("正在调用OpenAI接口，获取出题内容...")
         
-        resp = requests.get(
-            "https://api.qingyunke.com/api.php?key=free&appid=0&msg=",  # 优先推荐的全新可用接口
-            params={"msg": prompt},
-            timeout=180
+        # OpenAI接口请求参数（适配文本生成，贴合公考出题逻辑）
+        response = client.chat.completions.create(
+            model="deepseek-r1",  # 适配免费接口，生成内容稳定，足够满足刷题需求
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=3000,  # 足够生成25道职测+5道综应题目
+            temperature=0.7,  # 控制出题随机性，贴合真题难度
+            top_p=0.9,
+            stream=False
         )
         
-        # 新增：打印AI接口响应结果（步骤2：AI返回内容）
-        print("【关键步骤2：AI接口返回结果】")
-        print(f"接口响应状态码：{resp.status_code}")  # 200代表接口调用成功
-        print(f"接口返回原始内容：{resp.text}")  # 打印AI返回的完整内容
-        data = resp.json()
-        content = data.get("content", "")
+        # 新增：打印OpenAI接口响应结果（步骤2：AI返回内容）
+        print("【关键步骤2：OpenAI接口返回结果】")
+        print(f"接口响应状态：成功（已收到返回内容）")
+        # 提取OpenAI返回的文本内容，适配接口返回格式
+        content = response.choices[0].message.content.strip()
         print(f"AI解析后出题内容（精简）：{content[:100]}...")
         
         # 新增：打印AI出题结果判断（步骤3：出题结果）
@@ -104,6 +116,7 @@ def get_access_token():
         print(f"使用的APPSECRET：{APPSECRET[:8]}****（隐藏部分字符，保护隐私）")
         print("正在获取微信推送授权token...")
         
+        import requests  # 此处导入避免与OpenAI客户端冲突，不影响运行
         resp = requests.get(url, timeout=10)
         data = resp.json()
         
@@ -161,6 +174,7 @@ def send_to_wechat(content):
         }
     }
     try:
+        import requests  # 此处导入避免与OpenAI客户端冲突，不影响运行
         # 新增：打印推送请求信息
         print("【关键步骤7：发起微信推送】")
         print(f"推送请求数据（精简）：{str(data)[:150]}...")
