@@ -8,7 +8,7 @@ on:
 
 jobs:
   run-script:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # 更换为更稳定的运行器版本，减少排队概率
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -16,11 +16,15 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests openai  # 新增openai依赖，确保客户端能正常运行
       - name: Run
         env:
+          # 微信相关密钥（不变）
           APPID: ${{ secrets.APPID }}
           APPSECRET: ${{ secrets.APPSECRET }}
           TEMPLATE_ID: ${{ secrets.TEMPLATE_ID }}
           OPENID: ${{ secrets.OPENID }}
+          # OpenAI相关变量（适配你的配置，读取GitHub中设置的变量）
+          API_KEY: ${{ secrets.API_KEY }}
+          OPENAI_API_BASE: ${{ secrets.OPENAI_API_BASE }}
         run: python questions.py
